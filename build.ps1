@@ -2,6 +2,58 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Check .NET version requirement
+Write-Host "Checking .NET SDK version..." -ForegroundColor Cyan
+
+# Read required version from global.json
+$globalJsonPath = Join-Path (Get-Location) "global.json"
+if (-not (Test-Path $globalJsonPath)) {
+    Write-Error "global.json not found. Cannot determine required .NET SDK version."
+    exit 1
+}
+
+$globalJson = Get-Content $globalJsonPath | ConvertFrom-Json
+$requiredVersion = $globalJson.sdk.version
+Write-Host "Required .NET SDK version: $requiredVersion" -ForegroundColor Yellow
+
+# Check if dotnet command is available and get version
+# We need to run from a different directory to avoid global.json influence
+$tempDir = [System.IO.Path]::GetTempPath()
+$originalLocation = Get-Location
+try {
+    Set-Location $tempDir
+    $installedVersion = dotnet --version 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet command failed"
+    }
+} catch {
+    Write-Error "❌ .NET SDK is not installed or not in PATH. Please install .NET $requiredVersion or later."
+    Write-Host "   Download from: https://dotnet.microsoft.com/download" -ForegroundColor Yellow
+    exit 1
+} finally {
+    Set-Location $originalLocation
+}
+
+Write-Host "Installed .NET SDK version: $installedVersion" -ForegroundColor Yellow
+
+# Parse version numbers for comparison
+$requiredVersionParts = $requiredVersion.Split('.')
+$installedVersionParts = $installedVersion.Split('.')
+
+# Compare major version (must be 9 or higher)
+$requiredMajor = [int]$requiredVersionParts[0]
+$installedMajor = [int]$installedVersionParts[0]
+
+if ($installedMajor -lt $requiredMajor) {
+    Write-Error "❌ .NET $requiredMajor is required but .NET $installedMajor is installed."
+    Write-Host "   Required: .NET $requiredVersion or compatible" -ForegroundColor Yellow
+    Write-Host "   Installed: .NET $installedVersion" -ForegroundColor Yellow
+    Write-Host "   Download .NET $requiredMajor from: https://dotnet.microsoft.com/download" -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Host "✅ .NET SDK version check passed" -ForegroundColor Green
+
 # Options
 $configuration = 'Release'
 $artifactsDir = Join-Path (Resolve-Path .) 'artifacts'
